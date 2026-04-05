@@ -3,17 +3,24 @@ import CropSelector from './components/CropSelector'
 import ColorPicker from './components/ColorPicker'
 
 const FIT_MODES = [
-  { value: 'contain', label: '等比缩放', desc: '保持比例，留边透明' },
-  { value: 'cover',   label: '等比裁剪', desc: '保持比例，裁掉多余' },
-  { value: 'stretch', label: '拉伸填充', desc: '强制填满，可能变形' },
+  { value: 'contain', label: '等比缩放', desc: '留边透明' },
+  { value: 'cover',   label: '等比裁剪', desc: '裁掉多余' },
+  { value: 'stretch', label: '拉伸填充', desc: '强制填满' },
 ]
 
 const BG_MODES = [
-  { value: 'false', label: '不去背景', icon: '🚫' },
-  { value: 'auto',  label: '自动检测', icon: '🔍' },
-  { value: 'white', label: '去白底',   icon: '⬜' },
-  { value: 'black', label: '去黑底',   icon: '⬛' },
-  { value: 'pick',  label: '点击取色', icon: '🎨' },
+  { value: 'false', label: '保留背景' },
+  { value: 'auto',  label: '自动检测' },
+  { value: 'white', label: '去白底'   },
+  { value: 'black', label: '去黑底'   },
+  { value: 'pick',  label: '取色去背' },
+]
+
+const STEPS = [
+  { n: '01', t: '上传模板', d: '原版图片作为尺寸/格式参考' },
+  { n: '02', t: '上传素材', d: '新图片，可框选局部区域' },
+  { n: '03', t: '配置适配', d: '填充方式 + 背景处理' },
+  { n: '04', t: '下载结果', d: '格式与原版完全一致' },
 ]
 
 function UploadZone({ label, accept, multiple, onChange }) {
@@ -24,13 +31,18 @@ function UploadZone({ label, accept, multiple, onChange }) {
     onChange({ target: { files } })
   }
   return (
-    <label style={{ ...s.zone, ...(drag ? s.zoneDrag : {}), display: 'block' }}
+    <label
+      style={{ ...s.zone, ...(drag ? s.zoneDrag : {}) }}
       onDragOver={e => { e.preventDefault(); setDrag(true) }}
-      onDragLeave={() => setDrag(false)} onDrop={handleDrop}>
+      onDragLeave={() => setDrag(false)}
+      onDrop={handleDrop}
+    >
       <input type="file" accept={accept} multiple={multiple} style={{ display: 'none' }} onChange={onChange} />
-      <div style={s.zoneIcon}>📁</div>
+      <svg style={s.zoneIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
       <div style={s.zoneLabel}>{label}</div>
-      <div style={s.zoneHint}>点击或拖拽上传</div>
+      <div style={s.zoneHint}>或将文件拖拽至此</div>
     </label>
   )
 }
@@ -44,7 +56,8 @@ export default function App() {
   const [previewUrl, setPreviewUrl] = useState(null)
   const [previewing, setPreviewing] = useState(false)
   const [processing, setProcessing] = useState(null)
-  const [done, setDone] = useState([]) // completed filenames
+  const [done, setDone] = useState([])
+  const [lightbox, setLightbox] = useState(false)
   const previewTimer = useRef(null)
 
   function reset() {
@@ -62,8 +75,10 @@ export default function App() {
   function handleNewImage(e) {
     const f = e.target.files[0]
     if (!f) return
-    setNewImage({ file: f, url: URL.createObjectURL(f) })
+    const img = { file: f, url: URL.createObjectURL(f) }
+    setNewImage(img)
     setCrop(null); setPreviewUrl(null)
+    triggerPreview(null, fitMode, f, removeBg)
   }
 
   const triggerPreview = useCallback((cropVal, modeVal, imgFile, bgVal) => {
@@ -75,7 +90,7 @@ export default function App() {
       fd.append('new_image', imgFile)
       fd.append('fit_mode', modeVal)
       if (cropVal) { fd.append('crop_x', cropVal.x); fd.append('crop_y', cropVal.y); fd.append('crop_w', cropVal.w); fd.append('crop_h', cropVal.h) }
-      fd.append('preview_w', 280); fd.append('preview_h', 280)
+      fd.append('preview_w', 220); fd.append('preview_h', 220)
       fd.append('remove_bg', bgVal)
       const res = await fetch('/preview', { method: 'POST', body: fd })
       if (res.ok) setPreviewUrl(URL.createObjectURL(await res.blob()))
@@ -113,117 +128,135 @@ export default function App() {
 
   return (
     <div style={s.page}>
+      {/* Lightbox */}
+      {lightbox && previewUrl && (
+        <div style={s.lightboxOverlay} onClick={() => setLightbox(false)}>
+          <img src={previewUrl} alt="large preview" style={s.lightboxImg} onClick={e => e.stopPropagation()} />
+          <button style={s.lightboxClose} onClick={() => setLightbox(false)}>✕</button>
+        </div>
+      )}
+
       {/* Header */}
       <header style={s.header}>
         <div style={s.headerInner}>
-          <div style={s.headerLeft}>
-            <div style={s.logo}>
-              <span style={s.logoIcon}>⚡</span>
-              <span style={s.logoText}>ImgFit</span>
-            </div>
-            <div style={s.headerDivider} />
+          <div style={s.brand}>
+            <span style={s.logo}>
+              <span style={s.logoImg}>Img</span>
+              <span style={s.logoFit}>Fit</span>
+            </span>
+            <span style={s.brandSep} />
             <div>
-              <div style={s.tagline}>图片规格适配工具</div>
-              <div style={s.taglineSub}>保留原版尺寸 · 格式 · 透明背景，一键替换图片内容</div>
+              <div style={s.brandTitle}>图片规格适配工具</div>
+              <div style={s.brandDesc}>上传原版图片作为模板，自动保留其尺寸、格式、透明背景，将新素材一键适配输出 · 支持 PNG / JPG / WebP / ICO / ICNS / SVG</div>
             </div>
           </div>
-          {(templates.length > 0 || newImage) && (
-            <button style={s.resetBtn} onClick={reset}>↺ 开始新作业</button>
-          )}
+          <a href="https://github.com/HatcherZhao/imgfit" target="_blank" rel="noopener noreferrer" style={s.githubBtn} title="View on GitHub">
+            <svg viewBox="0 0 24 24" fill="currentColor" style={{ width: 20, height: 20 }}>
+              <path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/>
+            </svg>
+          </a>
         </div>
       </header>
 
-      {/* 使用说明 */}
-      <div style={s.guide}>
-        {[
-          { n: '1', t: '上传模板', d: '原版图片作为尺寸/格式参考' },
-          { n: '2', t: '上传素材', d: '新图片，可框选局部区域' },
-          { n: '3', t: '配置适配', d: '填充方式 + 去背景选项' },
-          { n: '4', t: '下载结果', d: '格式与原版完全一致' },
-        ].map((item, i) => (
-          <div key={item.n} style={s.guideItem}>
-            <div style={s.guideNum}>{item.n}</div>
-            <div>
-              <div style={s.guideTitle}>{item.t}</div>
-              <div style={s.guideDesc}>{item.d}</div>
+      {/* Steps guide */}
+      <div style={s.stepsBar}>
+        <div style={s.stepsInner}>
+          {STEPS.map((step, i) => (
+            <div key={step.n} style={s.stepItem}>
+              <span style={s.stepNum}>{step.n}</span>
+              <div>
+                <div style={s.stepTitle}>{step.t}</div>
+                <div style={s.stepDesc}>{step.d}</div>
+              </div>
+              {i < 3 && <span style={s.stepArrow}>→</span>}
             </div>
-            {i < 3 && <div style={s.guideArrow}>→</div>}
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
 
-      <div style={s.main}>
-        {/* Step 1 */}
-        <section style={s.card}>
-          <div style={s.cardHeader}>
-            <span style={s.badge}>步骤 1</span>
-            <h2 style={s.h2}>上传原版图片（模板）</h2>
-          </div>
-          <p style={s.cardDesc}>支持 PNG · JPG · WebP · GIF · ICO · ICNS · SVG，可多选</p>
-          <UploadZone accept="image/*,.icns,.ico,.svg" multiple onChange={handleTemplates}
-            label="点击或拖拽上传模板图片（支持多张）" />
-          {templates.length > 0 && (
-            <div style={s.thumbRow}>
-              {templates.map((t, i) => (
-                <div key={i} style={s.thumb}>
-                  <div style={s.thumbImgWrap}>
-                    <img src={t.url} alt={t.name} style={s.thumbImg} />
-                    {done.includes(t.name) && <div style={s.thumbDone}>✓</div>}
+      {/* Workspace */}
+      <div style={s.workspace}>
+        {/* LEFT PANEL */}
+        <div style={s.panel}>
+          {/* Template upload */}
+          <div style={s.section}>
+            <div style={s.sectionHead}>
+              <span style={s.sectionTitle}>模板图片</span>
+              {(templates.length > 0 || newImage) && (
+                <button style={s.resetBtn} onClick={reset}>↺ 重新开始</button>
+              )}
+              <span style={s.sectionMeta}>PNG · JPG · WebP · GIF · ICO · ICNS · SVG</span>
+            </div>
+            <UploadZone accept="image/*,.icns,.ico,.svg" multiple onChange={handleTemplates} label="点击上传模板（支持多张）" />
+            {templates.length > 0 && (
+              <div style={s.thumbGrid}>
+                {templates.map((t, i) => (
+                  <div key={i} style={s.thumbItem}>
+                    <div style={s.thumbBox}>
+                      <img src={t.url} alt={t.name} style={s.thumbImg} />
+                      {done.includes(t.name) && (
+                        <div style={s.thumbCheck}>
+                          <svg viewBox="0 0 16 16" fill="none" stroke="#fff" strokeWidth="2.5" style={{ width: 14, height: 14 }}>
+                            <path d="M3 8l3.5 3.5L13 5" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        </div>
+                      )}
+                    </div>
+                    <span style={s.thumbLabel}>{t.name}</span>
                   </div>
-                  <span style={s.thumbName}>{t.name}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-
-        {/* Step 2 */}
-        <section style={s.card}>
-          <div style={s.cardHeader}>
-            <span style={s.badge}>步骤 2</span>
-            <h2 style={s.h2}>上传新图片（素材）</h2>
+                ))}
+              </div>
+            )}
           </div>
-          <p style={s.cardDesc}>上传后可拖拽框选局部区域；不框选则使用整张图</p>
-          <UploadZone accept="image/*" multiple={false} onChange={handleNewImage} label="点击或拖拽上传素材图片" />
-          {newImage && (
-            <div style={{ marginTop: 12 }}>
-              <p style={s.cropHint}>🖱 在图片上拖拽选择要使用的区域（可选）</p>
-              <CropSelector imageUrl={newImage.url} onCrop={onCrop} />
-              {crop && <p style={s.cropInfo}>已选区域：{Math.round(crop.w)} × {Math.round(crop.h)} px</p>}
-            </div>
-          )}
-        </section>
 
-        {/* Step 3 */}
-        {newImage && (
-          <section style={s.card}>
-            <div style={s.cardHeader}>
-              <span style={s.badge}>步骤 3</span>
-              <h2 style={s.h2}>配置适配方式</h2>
+          <div style={s.divider} />
+
+          {/* Source image upload */}
+          <div style={s.section}>
+            <div style={s.sectionHead}>
+              <span style={s.sectionTitle}>素材图片</span>
+              <span style={s.sectionMeta}>可框选局部区域</span>
+            </div>
+            <UploadZone accept="image/*" multiple={false} onChange={handleNewImage} label="点击上传素材" />
+            {newImage && (
+              <div style={{ marginTop: 10 }}>
+                <p style={s.hint}>拖拽选择要使用的区域（可选）</p>
+                <CropSelector imageUrl={newImage.url} onCrop={onCrop} />
+                {crop && <p style={s.cropBadge}>✂ {Math.round(crop.w)} × {Math.round(crop.h)} px</p>}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* RIGHT PANEL */}
+        <div style={s.panel}>
+          {/* Config */}
+          <div style={s.section}>
+            <div style={s.sectionHead}>
+              <span style={s.sectionTitle}>适配配置</span>
             </div>
 
-            <div style={s.sectionLabel}>填充方式</div>
-            <div style={s.modeRow}>
+            <div style={s.fieldLabel}>填充模式</div>
+            <div style={s.fitRow}>
               {FIT_MODES.map(m => (
-                <label key={m.value} style={{ ...s.modeCard, ...(fitMode === m.value ? s.modeCardActive : {}) }}>
-                  <input type="radio" name="fit" value={m.value} checked={fitMode === m.value}
-                    onChange={() => onFitMode(m.value)} style={{ display: 'none' }} />
-                  <div style={s.modeName}>{m.label}</div>
-                  <div style={s.modeDesc}>{m.desc}</div>
-                </label>
+                <button key={m.value}
+                  style={{ ...s.fitBtn, ...(fitMode === m.value ? s.fitBtnOn : {}) }}
+                  onClick={() => onFitMode(m.value)}>
+                  <span style={s.fitBtnName}>{m.label}</span>
+                  <span style={s.fitBtnDesc}>{m.desc}</span>
+                </button>
               ))}
             </div>
 
-            <div style={s.sectionLabel}>去除背景色</div>
-            <div style={s.bgModeRow}>
+            <div style={s.fieldLabel}>背景处理</div>
+            <div style={s.bgRow}>
               {BG_MODES.map(opt => {
                 const isActive = opt.value === 'pick' ? removeBg.startsWith('#') : removeBg === opt.value
                 return (
                   <button key={opt.value}
-                    style={{ ...s.bgBtn, ...(isActive ? s.bgBtnActive : {}) }}
+                    style={{ ...s.bgChip, ...(isActive ? s.bgChipOn : {}) }}
                     onClick={() => onRemoveBg(opt.value)}>
-                    <span style={s.bgBtnIcon}>{opt.icon}</span>
-                    <span>{opt.label}</span>
+                    {opt.label}
                   </button>
                 )
               })}
@@ -231,144 +264,181 @@ export default function App() {
 
             {(removeBg === 'pick' || removeBg.startsWith('#')) && newImage && (
               <div style={{ marginTop: 10 }}>
-                <p style={s.cropHint}>🎨 点击素材图上的背景区域取色</p>
+                <p style={s.hint}>点击图片上的背景区域取色</p>
                 <ColorPicker imageUrl={newImage.url} onPick={hex => {
                   setRemoveBg(hex)
                   triggerPreview(crop, fitMode, newImage.file, hex)
                 }} />
               </div>
             )}
+          </div>
 
-            <div style={s.previewWrap}>
-              <div style={s.previewHeader}>
-                <span style={s.previewLabel}>实时预览（280×280）</span>
-                {previewing && <span style={s.previewLoading}>⏳ 生成中...</span>}
-              </div>
-              <div style={s.previewImgWrap}>
-                {previewUrl
-                  ? <img src={previewUrl} alt="preview" style={s.previewImg} />
-                  : <div style={s.previewPlaceholder}>{previewing ? '⏳' : '上传素材后自动预览'}</div>
-                }
-                {previewing && previewUrl && <div style={s.previewOverlay}>⏳</div>}
-              </div>
-            </div>
-          </section>
-        )}
+          <div style={s.divider} />
 
-        {/* Step 4 */}
-        {templates.length > 0 && newImage && (
-          <section style={s.card}>
-            <div style={s.cardHeader}>
-              <span style={s.badge}>步骤 4</span>
-              <h2 style={s.h2}>生成并下载</h2>
+          {/* Preview */}
+          <div style={s.section}>
+            <div style={s.sectionHead}>
+              <span style={s.sectionTitle}>实时预览</span>
+              {previewing && <span style={s.spinnerLabel}>处理中…</span>}
+              {previewUrl && !previewing && <span style={s.clickHint}>点击查看大图</span>}
             </div>
-            <p style={s.cardDesc}>点击对应按钮下载，格式与原版完全一致</p>
-            <div style={s.btnRow}>
-              {templates.map((t, i) => {
-                const isDone = done.includes(t.name)
-                const isProc = processing === t.name
-                return (
-                  <button key={i}
-                    style={{ ...s.btn, ...(isDone ? s.btnDone : {}), ...(isProc ? s.btnLoading : {}) }}
-                    disabled={!!processing}
-                    onClick={() => handleProcess(t)}>
-                    {isProc ? '⏳ 处理中...' : isDone ? `✓ ${t.name}` : `⬇ ${t.name}`}
-                  </button>
-                )
-              })}
+            <div
+              style={{ ...s.previewFrame, ...(previewUrl ? s.previewFrameClickable : {}) }}
+              onClick={() => previewUrl && setLightbox(true)}
+            >
+              {previewUrl ? (
+                <>
+                  <img src={previewUrl} alt="preview" style={s.previewImg} />
+                  {previewing && <div style={s.previewMask}><span>⟳</span></div>}
+                </>
+              ) : (
+                <div style={s.previewEmpty}>
+                  {previewing
+                    ? <span style={{ fontSize: 22, color: '#9ca3af' }}>⟳</span>
+                    : <span style={s.previewEmptyText}>上传素材后自动预览</span>
+                  }
+                </div>
+              )}
             </div>
-            {allDone && (
-              <div style={s.allDoneBar}>
-                <span>🎉 全部完成！</span>
-                <button style={s.newJobBtn} onClick={reset}>↺ 开始新作业</button>
-              </div>
+          </div>
+
+          <div style={s.divider} />
+
+          {/* Download */}
+          <div style={s.section}>
+            <div style={s.sectionHead}>
+              <span style={s.sectionTitle}>生成下载</span>
+            </div>
+            {templates.length > 0 && newImage ? (
+              <>
+                <div style={s.downloadGrid}>
+                  {templates.map((t, i) => {
+                    const isDone = done.includes(t.name)
+                    const isProc = processing === t.name
+                    return (
+                      <button key={i}
+                        style={{ ...s.dlBtn, ...(isDone ? s.dlBtnDone : {}), ...(isProc ? s.dlBtnBusy : {}) }}
+                        disabled={!!processing}
+                        onClick={() => handleProcess(t)}>
+                        {isProc ? '处理中…' : isDone ? `✓ ${t.name}` : `↓ ${t.name}`}
+                      </button>
+                    )
+                  })}
+                </div>
+                {allDone && (
+                  <div style={s.doneBar}>
+                    <span>🎉 全部完成</span>
+                    <button style={s.doneResetBtn} onClick={reset}>↺ 重新开始</button>
+                  </div>
+                )}
+              </>
+            ) : (
+              <p style={s.hint}>请先上传模板和素材图片</p>
             )}
-          </section>
-        )}
+          </div>
+        </div>
       </div>
     </div>
   )
 }
 
+const FONT = '"Inter", "-apple-system", "BlinkMacSystemFont", "Segoe UI", sans-serif'
+const MONO = '"JetBrains Mono", "Fira Code", "SF Mono", "Cascadia Code", monospace'
+const BLUE = '#4f6ef7'
+const BLUE_BG = '#eef1fe'
+const BORDER = '#e4e7ec'
+const TEXT = '#111827'
+const MUTED = '#6b7280'
+const FAINT = '#f9fafb'
+
 const s = {
-  page: { minHeight: '100vh', background: '#f0f2f5' },
+  page: { minHeight: '100vh', background: '#f3f4f6', fontFamily: FONT, color: TEXT },
+
+  // Lightbox
+  lightboxOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'zoom-out' },
+  lightboxImg: { maxWidth: '90vw', maxHeight: '90vh', objectFit: 'contain', borderRadius: 8, boxShadow: '0 25px 60px rgba(0,0,0,0.5)' },
+  lightboxClose: { position: 'absolute', top: 20, right: 24, background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', fontSize: 18, width: 36, height: 36, borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
 
   // Header
-  header: { background: 'linear-gradient(135deg, #0f172a 0%, #1e40af 100%)', padding: '20px 0' },
-  headerInner: { maxWidth: 900, margin: '0 auto', padding: '0 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 },
-  headerLeft: { display: 'flex', alignItems: 'center', gap: 16 },
-  logo: { display: 'flex', alignItems: 'center', gap: 8 },
-  logoIcon: { fontSize: 28, lineHeight: 1 },
-  logoText: { fontSize: 28, fontWeight: 800, color: '#fff', letterSpacing: '-0.5px' },
-  headerDivider: { width: 1, height: 36, background: 'rgba(255,255,255,0.2)' },
-  tagline: { fontSize: 14, fontWeight: 600, color: '#fff', marginBottom: 2 },
-  taglineSub: { fontSize: 12, color: 'rgba(255,255,255,0.6)' },
-  resetBtn: { padding: '7px 16px', background: 'rgba(255,255,255,0.12)', color: '#fff', border: '1px solid rgba(255,255,255,0.25)', borderRadius: 8, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' },
+  header: { background: '#fff', borderBottom: `1px solid ${BORDER}`, position: 'sticky', top: 0, zIndex: 10 },
+  headerInner: { maxWidth: 1160, margin: '0 auto', padding: '0 28px', height: 60, display: 'flex', alignItems: 'center', justifyContent: 'space-between' },
+  brand: { display: 'flex', alignItems: 'center', gap: 12 },
+  logo: { fontFamily: MONO, fontSize: 24, fontWeight: 800, letterSpacing: '-0.5px', lineHeight: 1, display: 'flex', alignItems: 'center' },
+  logoBracket: { color: '#9ca3af', fontWeight: 400 },
+  logoImg: { color: TEXT },
+  logoFit: { color: BLUE, fontStyle: 'italic' },
+  brandSep: { display: 'inline-block', width: 1, height: 16, background: BORDER },
+  brandTitle: { fontSize: 13, fontWeight: 600, color: TEXT, marginBottom: 2 },
+  brandDesc: { fontSize: 11, color: MUTED, maxWidth: 500 },
+  githubBtn: { display: 'flex', alignItems: 'center', justifyContent: 'center', width: 36, height: 36, borderRadius: 8, color: '#24292f', border: `1px solid ${BORDER}`, background: FAINT, textDecoration: 'none', flexShrink: 0 },
+  resetBtn: { padding: '6px 14px', background: '#fff7ed', color: '#c2410c', border: '1px solid #fed7aa', borderRadius: 7, fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: FONT },
 
-  // Guide
-  guide: { maxWidth: 900, margin: '0 auto', padding: '16px 24px 0', display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' },
-  guideItem: { flex: '1 1 160px', display: 'flex', gap: 10, alignItems: 'center', background: '#fff', borderRadius: 10, padding: '12px 14px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', position: 'relative' },
-  guideNum: { width: 26, height: 26, borderRadius: '50%', background: '#1e40af', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, flexShrink: 0 },
-  guideTitle: { fontSize: 12, fontWeight: 600, color: '#1e293b', marginBottom: 1 },
-  guideDesc: { fontSize: 11, color: '#64748b', lineHeight: 1.4 },
-  guideArrow: { position: 'absolute', right: -12, color: '#94a3b8', fontSize: 14, zIndex: 1 },
+  // Steps bar
+  stepsBar: { background: '#fff', borderBottom: `1px solid ${BORDER}` },
+  stepsInner: { maxWidth: 1160, margin: '0 auto', padding: '14px 28px', display: 'flex', gap: 0, alignItems: 'center' },
+  stepItem: { display: 'flex', alignItems: 'center', gap: 8, flex: 1, position: 'relative' },
+  stepNum: { fontSize: 11, fontWeight: 700, color: BLUE, fontFamily: MONO, minWidth: 24 },
+  stepTitle: { fontSize: 12, fontWeight: 600, color: TEXT },
+  stepDesc: { fontSize: 11, color: MUTED },
+  stepArrow: { color: '#d1d5db', fontSize: 14, marginLeft: 'auto', paddingRight: 12 },
 
-  // Main
-  main: { maxWidth: 900, margin: '0 auto', padding: '16px 24px 40px' },
-  card: { background: '#fff', borderRadius: 12, padding: '20px 24px', marginBottom: 16, boxShadow: '0 1px 4px rgba(0,0,0,0.07)' },
-  cardHeader: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 },
-  badge: { background: '#eff6ff', color: '#1e40af', fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 20, border: '1px solid #bfdbfe' },
-  h2: { fontSize: 15, fontWeight: 600, color: '#1e293b' },
-  cardDesc: { fontSize: 12, color: '#94a3b8', marginBottom: 14 },
-  sectionLabel: { fontSize: 12, fontWeight: 600, color: '#64748b', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' },
+  // Workspace
+  workspace: { maxWidth: 1160, margin: '0 auto', padding: '16px 28px 48px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, alignItems: 'start' },
 
-  // Upload
-  zone: { border: '2px dashed #cbd5e1', borderRadius: 10, padding: '24px 20px', textAlign: 'center', cursor: 'pointer', transition: 'all 0.2s', background: '#f8fafc' },
-  zoneDrag: { borderColor: '#1e40af', background: '#eff6ff' },
-  zoneIcon: { fontSize: 26, marginBottom: 6 },
-  zoneLabel: { fontSize: 13, color: '#475569', fontWeight: 500, marginBottom: 3 },
-  zoneHint: { fontSize: 11, color: '#94a3b8' },
+  // Panel
+  panel: { background: '#fff', borderRadius: 12, border: `1px solid ${BORDER}`, overflow: 'hidden' },
+  section: { padding: '16px 20px' },
+  sectionHead: { display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 10 },
+  sectionTitle: { fontSize: 13, fontWeight: 600, color: TEXT },
+  sectionMeta: { fontSize: 11, color: MUTED },
+  divider: { height: 1, background: BORDER },
+
+  // Upload zone — compact
+  zone: { display: 'block', border: `1.5px dashed ${BORDER}`, borderRadius: 8, padding: '14px 12px', textAlign: 'center', cursor: 'pointer', background: FAINT, transition: 'border-color 0.15s, background 0.15s' },
+  zoneDrag: { borderColor: BLUE, background: BLUE_BG },
+  zoneIcon: { width: 20, height: 20, color: '#9ca3af', margin: '0 auto 6px', display: 'block' },
+  zoneLabel: { fontSize: 12, color: '#374151', fontWeight: 500, marginBottom: 2 },
+  zoneHint: { fontSize: 11, color: '#9ca3af' },
 
   // Thumbs
-  thumbRow: { display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 14 },
-  thumb: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 },
-  thumbImgWrap: { width: 68, height: 68, border: '1px solid #e2e8f0', borderRadius: 8, overflow: 'hidden', background: 'repeating-conic-gradient(#e2e8f0 0% 25%, #fff 0% 50%) 0 0 / 12px 12px', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' },
+  thumbGrid: { display: 'flex', flexWrap: 'wrap', gap: 7, marginTop: 10 },
+  thumbItem: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 },
+  thumbBox: { width: 52, height: 52, border: `1px solid ${BORDER}`, borderRadius: 6, overflow: 'hidden', background: 'repeating-conic-gradient(#f0f0f0 0% 25%, #fff 0% 50%) 0 0 / 8px 8px', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' },
   thumbImg: { maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' },
-  thumbDone: { position: 'absolute', inset: 0, background: 'rgba(16,185,129,0.75)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontWeight: 700 },
-  thumbName: { fontSize: 10, color: '#64748b', maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'center' },
+  thumbCheck: { position: 'absolute', inset: 0, background: 'rgba(16,185,129,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  thumbLabel: { fontSize: 10, color: MUTED, maxWidth: 60, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'center' },
 
-  // Crop
-  cropHint: { fontSize: 12, color: '#64748b', marginBottom: 8 },
-  cropInfo: { fontSize: 12, color: '#1e40af', marginTop: 6, fontWeight: 500 },
+  hint: { fontSize: 12, color: MUTED, margin: '0 0 8px' },
+  cropBadge: { display: 'inline-block', marginTop: 5, fontSize: 11, color: BLUE, background: BLUE_BG, padding: '2px 8px', borderRadius: 20, fontWeight: 500 },
+  fieldLabel: { fontSize: 11, fontWeight: 600, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 7 },
 
   // Fit mode
-  modeRow: { display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 20 },
-  modeCard: { flex: '1 1 130px', border: '2px solid #e2e8f0', borderRadius: 10, padding: '10px 14px', cursor: 'pointer', transition: 'all 0.15s', background: '#f8fafc' },
-  modeCardActive: { borderColor: '#1e40af', background: '#eff6ff' },
-  modeName: { fontSize: 13, fontWeight: 600, color: '#1e293b', marginBottom: 3 },
-  modeDesc: { fontSize: 11, color: '#64748b' },
+  fitRow: { display: 'flex', gap: 6, marginBottom: 16 },
+  fitBtn: { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', padding: '8px 10px', border: `1.5px solid ${BORDER}`, borderRadius: 8, background: FAINT, cursor: 'pointer', transition: 'all 0.12s', fontFamily: FONT },
+  fitBtnOn: { borderColor: BLUE, background: BLUE_BG },
+  fitBtnName: { fontSize: 12, fontWeight: 600, color: TEXT, marginBottom: 2 },
+  fitBtnDesc: { fontSize: 10, color: MUTED },
 
-  // BG mode
-  bgModeRow: { display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 },
-  bgBtn: { display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', border: '2px solid #e2e8f0', borderRadius: 8, background: '#f8fafc', cursor: 'pointer', fontSize: 13, color: '#475569', transition: 'all 0.15s', fontWeight: 500 },
-  bgBtnActive: { borderColor: '#1e40af', background: '#eff6ff', color: '#1e40af' },
-  bgBtnIcon: { fontSize: 15 },
+  // BG chips
+  bgRow: { display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 4 },
+  bgChip: { padding: '5px 11px', border: `1.5px solid ${BORDER}`, borderRadius: 20, background: FAINT, cursor: 'pointer', fontSize: 12, color: '#374151', fontWeight: 500, transition: 'all 0.12s', fontFamily: FONT },
+  bgChipOn: { borderColor: BLUE, background: BLUE_BG, color: BLUE },
 
   // Preview
-  previewWrap: { marginTop: 16 },
-  previewHeader: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 },
-  previewLabel: { fontSize: 12, color: '#94a3b8' },
-  previewLoading: { fontSize: 12, color: '#f59e0b', fontWeight: 500 },
-  previewImgWrap: { position: 'relative', width: 280, height: 280 },
-  previewImg: { width: 280, height: 280, objectFit: 'contain', border: '1px solid #e2e8f0', borderRadius: 8, background: 'repeating-conic-gradient(#e2e8f0 0% 25%, #fff 0% 50%) 0 0 / 16px 16px', display: 'block' },
-  previewPlaceholder: { width: 280, height: 280, border: '1px dashed #e2e8f0', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: '#94a3b8', background: '#f8fafc' },
-  previewOverlay: { position: 'absolute', inset: 0, background: 'rgba(255,255,255,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, borderRadius: 8 },
+  previewFrame: { position: 'relative', width: 220, height: 220, borderRadius: 10, overflow: 'hidden', border: `1px solid ${BORDER}`, background: 'repeating-conic-gradient(#f0f0f0 0% 25%, #fff 0% 50%) 0 0 / 14px 14px' },
+  previewFrameClickable: { cursor: 'zoom-in' },
+  previewImg: { width: 220, height: 220, objectFit: 'contain', display: 'block' },
+  previewMask: { position: 'absolute', inset: 0, background: 'rgba(255,255,255,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 },
+  previewEmpty: { width: 220, height: 220, display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  previewEmptyText: { fontSize: 12, color: '#9ca3af' },
+  spinnerLabel: { fontSize: 11, color: '#f59e0b', fontWeight: 500 },
+  clickHint: { fontSize: 11, color: MUTED },
 
   // Download
-  btnRow: { display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 4 },
-  btn: { padding: '8px 18px', background: '#1e40af', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: 'pointer', transition: 'all 0.15s' },
-  btnDone: { background: '#10b981' },
-  btnLoading: { opacity: 0.6, cursor: 'not-allowed' },
-  allDoneBar: { marginTop: 16, padding: '12px 16px', background: '#f0fdf4', borderRadius: 8, border: '1px solid #bbf7d0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 14, color: '#166534' },
-  newJobBtn: { padding: '6px 14px', background: '#10b981', color: '#fff', border: 'none', borderRadius: 6, fontSize: 13, cursor: 'pointer', fontWeight: 500 },
+  downloadGrid: { display: 'flex', flexWrap: 'wrap', gap: 7 },
+  dlBtn: { padding: '7px 14px', background: BLUE, color: '#fff', border: 'none', borderRadius: 7, fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: FONT, transition: 'opacity 0.12s', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  dlBtnDone: { background: '#10b981' },
+  dlBtnBusy: { opacity: 0.5, cursor: 'not-allowed' },
+  doneBar: { marginTop: 12, padding: '10px 14px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 13, color: '#166534' },
+  doneResetBtn: { padding: '5px 12px', background: '#10b981', color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: FONT },
 }
