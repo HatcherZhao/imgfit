@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+dist/
+build/
+
+# Node
+node_modules/
+dist/
+.env
+
+# macOS
+.DS_Store
+
+# Test/temp files
+生成的/
+原素材/
+新logo效果图/
+screenshot.png
+ui-new.png
+scripts/
+
+# Claude
+.claude/
+.playwright-mcp/
