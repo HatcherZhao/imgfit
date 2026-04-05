@@ -138,7 +138,7 @@ def fit_image(src: Image.Image, target_w: int, target_h: int, mode: str) -> Imag
 
 
 def process_raster(template_bytes: bytes, template_ext: str,
-                   new_img: Image.Image, fit_mode: str) -> bytes:
+                   new_img: Image.Image, fit_mode: str, compress: bool = False) -> bytes:
     """处理 PNG/JPG/WebP/BMP/TIFF/GIF 等位图格式"""
     tmpl = Image.open(io.BytesIO(template_bytes))
     w, h = tmpl.size
@@ -149,13 +149,21 @@ def process_raster(template_bytes: bytes, template_ext: str,
 
     if ext in ("jpg", "jpeg"):
         fitted = fitted.convert("RGB")
-        fitted.save(out, format="JPEG", quality=95)
+        fitted.save(out, format="JPEG", quality=85 if compress else 95)
     elif ext == "webp":
-        fitted.save(out, format="WEBP", lossless=True)
+        if compress:
+            fitted.save(out, format="WEBP", quality=85)
+        else:
+            fitted.save(out, format="WEBP", lossless=True)
     elif ext == "gif":
         fitted.convert("P", palette=Image.ADAPTIVE).save(out, format="GIF")
     else:
-        fitted.save(out, format="PNG")
+        if compress:
+            # 转为索引色（最多256色），大幅减少PNG文件体积
+            quantized = fitted.quantize(colors=256, method=Image.Quantize.FASTOCTREE)
+            quantized.save(out, format="PNG", optimize=True)
+        else:
+            fitted.save(out, format="PNG", compress_level=6)
 
     return out.getvalue()
 
@@ -163,7 +171,13 @@ def process_raster(template_bytes: bytes, template_ext: str,
 def process_ico(template_bytes: bytes, new_img: Image.Image, fit_mode: str) -> bytes:
     """处理 ICO：保留原始所有尺寸层"""
     tmpl = Image.open(io.BytesIO(template_bytes))
-    sizes = list({img.size for img in tmpl.ico.images}) if hasattr(tmpl, "ico") else [(16,16),(32,32),(48,48),(256,256)]
+    sizes = []
+    if hasattr(tmpl, "ico") and hasattr(tmpl.ico, "images"):
+        sizes = list({img.size for img in tmpl.ico.images})
+    elif hasattr(tmpl, "ico") and callable(getattr(tmpl.ico, "sizes", None)):
+        sizes = list(tmpl.ico.sizes())
+    if not sizes:
+        sizes = [(16, 16), (32, 32), (48, 48), (256, 256)]
 
     frames = []
     for (w, h) in sizes:

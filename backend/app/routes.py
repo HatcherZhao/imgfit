@@ -20,6 +20,7 @@ async def process(
     crop_w: float = Form(0),
     crop_h: float = Form(0),
     remove_bg: str = Form("false"),
+    compress: str = Form("false"),
 ):
     template_bytes = await template.read()
     new_bytes = await new_image.read()
@@ -58,7 +59,7 @@ async def process(
         result = process_icns(template_bytes, new_img, fit_mode)
         media_type = "image/icns"
     else:
-        result = process_raster(template_bytes, ext, new_img, fit_mode)
+        result = process_raster(template_bytes, ext, new_img, fit_mode, compress.lower() in ("true", "1"))
         media_type = f"image/{ext}" if ext not in ("jpg",) else "image/jpeg"
 
     out_filename = filename.rsplit(".", 1)[0] + "_output." + ext
@@ -96,4 +97,31 @@ async def preview(
     fitted = fit_image(new_img, preview_w, preview_h, fit_mode)
     buf = io.BytesIO()
     fitted.save(buf, format="PNG")
+    return Response(content=buf.getvalue(), media_type="image/png")
+
+
+@router.post("/thumbnail")
+async def thumbnail(file: UploadFile = File(...)):
+    """为 ICO/ICNS 等浏览器不支持的格式生成 PNG 缩略图"""
+    import tempfile, os
+    raw = await file.read()
+
+    # Pillow 原生支持 ICO/ICNS，但需要文件路径
+    tmp = tempfile.NamedTemporaryFile(suffix=".tmp", delete=False)
+    tmp.write(raw)
+    tmp.close()
+
+    try:
+        img = Image.open(tmp.name).convert("RGBA")
+    except Exception:
+        img = None
+    finally:
+        os.unlink(tmp.name)
+
+    if img is None:
+        return Response(status_code=400)
+
+    img.thumbnail((256, 256), Image.LANCZOS)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
     return Response(content=buf.getvalue(), media_type="image/png")

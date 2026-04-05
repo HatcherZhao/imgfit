@@ -53,6 +53,7 @@ export default function App() {
   const [crop, setCrop] = useState(null)
   const [fitMode, setFitMode] = useState('contain')
   const [removeBg, setRemoveBg] = useState('false')
+  const [compress, setCompress] = useState('false')
   const [previewUrl, setPreviewUrl] = useState(null)
   const [previewing, setPreviewing] = useState(false)
   const [processing, setProcessing] = useState(null)
@@ -62,14 +63,27 @@ export default function App() {
 
   function reset() {
     setTemplates([]); setNewImage(null); setCrop(null)
-    setFitMode('contain'); setRemoveBg('false')
+    setFitMode('contain'); setRemoveBg('false'); setCompress('false')
     setPreviewUrl(null); setProcessing(null); setDone([])
   }
 
   function handleTemplates(e) {
     const files = Array.from(e.target.files)
     if (!files.length) return
-    setTemplates(files.map(f => ({ file: f, url: URL.createObjectURL(f), name: f.name })))
+    const items = files.map(f => ({ file: f, url: URL.createObjectURL(f), name: f.name }))
+    setTemplates(items)
+    // ICO/ICNS 浏览器无法直接显示，异步替换为 PNG 缩略图
+    items.forEach((item, i) => {
+      const ext = item.name.split('.').pop().toLowerCase()
+      if (ext === 'icns' || ext === 'ico') {
+        const fd = new FormData(); fd.append('file', item.file)
+        fetch('/thumbnail', { method: 'POST', body: fd })
+          .then(r => r.ok ? r.blob() : null)
+          .then(blob => {
+            if (blob) setTemplates(prev => prev.map((t, j) => j === i ? { ...t, url: URL.createObjectURL(blob) } : t))
+          })
+      }
+    })
   }
 
   function handleNewImage(e) {
@@ -110,6 +124,7 @@ export default function App() {
     fd.append('fit_mode', fitMode)
     if (crop) { fd.append('crop_x', crop.x); fd.append('crop_y', crop.y); fd.append('crop_w', crop.w); fd.append('crop_h', crop.h) }
     fd.append('remove_bg', removeBg)
+    fd.append('compress', compress)
     const res = await fetch('/process', { method: 'POST', body: fd })
     if (res.ok) {
       const blob = await res.blob()
@@ -220,7 +235,6 @@ export default function App() {
               <div style={{ marginTop: 10 }}>
                 <p style={s.hint}>拖拽选择要使用的区域（可选）</p>
                 <CropSelector imageUrl={newImage.url} onCrop={onCrop} />
-                {crop && <p style={s.cropBadge}>✂ {Math.round(crop.w)} × {Math.round(crop.h)} px</p>}
               </div>
             )}
           </div>
@@ -269,6 +283,21 @@ export default function App() {
                 }} />
               </div>
             )}
+
+            <div style={{ ...s.fieldLabel, marginTop: 14 }}>输出优化</div>
+            <div style={s.bgRow}>
+              <button
+                style={{ ...s.bgChip, ...(compress === 'false' ? s.bgChipOn : {}) }}
+                onClick={() => setCompress('false')}>
+                保持原始
+              </button>
+              <button
+                style={{ ...s.bgChip, ...(compress === 'true' ? s.bgChipOn : {}) }}
+                onClick={() => setCompress('true')}>
+                压缩文件
+              </button>
+            </div>
+            {compress === 'true' && <p style={{ ...s.hint, marginTop: 4 }}>减小输出文件大小，略微降低画质</p>}
           </div>
 
           <div style={s.divider} />
