@@ -140,10 +140,8 @@ export default function App() {
       <header style={s.header}>
         <div style={s.headerInner}>
           <div style={s.brand}>
-            <span style={s.logo}>
-              <span style={s.logoImg}>Img</span>
-              <span style={s.logoFit}>Fit</span>
-            </span>
+            <img src="/imgfit-logo.png" alt="ImgFit" style={s.logoImg} />
+            <span style={s.logoText}>Img<span style={s.logoTextBlue}>Fit</span></span>
             <span style={s.brandSep} />
             <div>
               <div style={s.brandTitle}>图片规格适配工具</div>
@@ -363,10 +361,13 @@ const s = {
   header: { background: '#fff', borderBottom: `1px solid ${BORDER}`, position: 'sticky', top: 0, zIndex: 10 },
   headerInner: { maxWidth: 1160, margin: '0 auto', padding: '0 28px', height: 60, display: 'flex', alignItems: 'center', justifyContent: 'space-between' },
   brand: { display: 'flex', alignItems: 'center', gap: 12 },
-  logo: { fontFamily: MONO, fontSize: 24, fontWeight: 800, letterSpacing: '-0.5px', lineHeight: 1, display: 'flex', alignItems: 'center' },
-  logoBracket: { color: '#9ca3af', fontWeight: 400 },
-  logoImg: { color: TEXT },
-  logoFit: { color: BLUE, fontStyle: 'italic' },
+  logoImg: { width: 44, height: 44, objectFit: 'contain', borderRadius: 8 },
+  logoText: { fontFamily: MONO, fontSize: 22, fontWeight: 800, letterSpacing: '-0.5px', color: TEXT },
+  logoTextBlue: { color: BLUE, fontStyle: 'italic' },
+
+  // Footer
+  footer: { borderTop: `1px solid ${BORDER}`, background: '#fff', padding: '24px 0', display: 'flex', justifyContent: 'center' },
+  footerImg: { width: 120, height: 120, objectFit: 'contain' },
   brandSep: { display: 'inline-block', width: 1, height: 16, background: BORDER },
   brandTitle: { fontSize: 13, fontWeight: 600, color: TEXT, marginBottom: 2 },
   brandDesc: { fontSize: 11, color: MUTED, maxWidth: 500 },

@@ -2,7 +2,7 @@
 
 > 上传原版图片作为模板，自动保留其**尺寸、格式、透明背景**，将新素材一键适配输出。
 
-![ImgFit Screenshot](docs/screenshot.png)
+![ImgFit 支持格式](docs/imgfit-full.png)
 
 ---
 
@@ -15,6 +15,8 @@
 - 设计稿有透明背景，导出后背景消失了
 
 **ImgFit 就是为此而生。** 它不改变模板的任何规格，只替换画面内容。
+
+![ImgFit Screenshot](docs/screenshot.png)
 
 ---
 
